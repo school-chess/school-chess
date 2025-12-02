@@ -84,7 +84,7 @@
       max-height: 90%;
       z-index: 2;
       position: relative;
-      /* pointer-events: none;  <-- removed so we can drag */
+      /* pointer-events: none;  <-- keep removed so onpointerdown works */
     }
 
     /* Drag clone that follows the cursor */
@@ -149,7 +149,7 @@ function renderBoard() {
         img.draggable = false;
 
         // pointerdown on the IMG starts drag
-        img.onpointerdown = (e) => startDrag(e, sq, img, piece);
+        img.onpointerdown = (e) => startDrag(e, sq);
 
         div.appendChild(img);
       }
@@ -200,14 +200,13 @@ function onSquareClick(e) {
   clearSelection();
 }
 
-function selectSquare(sq, opts = {}) {
+function selectSquare(sq) {
   const piece = game.get(sq);
+  if (!piece) return;
   selected = sq;
   legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
   infoEl.textContent = `Selected ${piece.color} ${piece.type} on ${sq}`;
-  if (!opts.skipRender) {
-    renderBoard();
-  }
+  renderBoard();
 }
 
 function clearSelection() {
@@ -229,7 +228,10 @@ function makeMove(from, to) {
 
 /* ---------- DRAG LOGIC ---------- */
 
-function startDrag(e, sq, img, piece) {
+function startDrag(e, sq) {
+  const piece = game.get(sq);
+  if (!piece) return;
+
   // Only drag if it's that side's turn
   if (piece.color !== game.turn()) return;
 
@@ -239,8 +241,17 @@ function startDrag(e, sq, img, piece) {
   dragging = true;
   dragFrom = sq;
 
-  // Update selection + legal moves, but DON'T re-render board
-  selectSquare(sq, { skipRender: true });
+  // This will set selected + legalMoves AND re-render with highlights
+  selectSquare(sq);
+
+  // After render, grab the CURRENT img for this square
+  const squareEl = boardEl.querySelector(`[data-square="${sq}"]`);
+  const img = squareEl ? squareEl.querySelector("img") : null;
+  if (!img) {
+    dragging = false;
+    dragFrom = null;
+    return;
+  }
 
   // Hide the original piece while dragging
   dragSourceImg = img;
