@@ -4,303 +4,191 @@
   <meta charset="UTF-8" />
   <title>School Chess</title>
 
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" />
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
       background: #111;
       color: white;
-      font-family: system-ui, sans-serif;
-      overflow: hidden;
-    }
-
-    h1 { margin-bottom: 20px; }
-
-    .board {
-      display: grid;
-      grid-template-columns: repeat(8, 64px);
-      grid-template-rows: repeat(8, 64px);
-      border: 4px solid #222;
-      position: relative;
-    }
-
-    .square {
-      width: 64px;
-      height: 64px;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
       align-items: center;
-      position: relative;
-      cursor: pointer;
-      user-select: none;
-      z-index: 0;
+      min-height: 100vh;
+      margin: 0;
+      font-family: system-ui, sans-serif;
+    }
+    h1 { margin-top: 20px; margin-bottom: 20px; }
+
+    #board {
+      width: 512px;
     }
 
-    /* Chess.com colors */
-    .light { background: #eeeed2; }
-    .dark  { background: #769656; }
+    .white-1e1d7 { background-color: #eeeed2 !important; }
+    .black-3c85d { background-color: #769656 !important; }
 
-    /* Selected: orange outline */
-    .selected {
-      outline: 3px solid orange;
-      outline-offset: -3px;
+    .highlight-selected {
+      box-shadow: inset 0 0 0 3px orange !important;
+    }
+    .highlight-legal {
+      box-shadow: inset 0 0 0 3px yellow !important;
+    }
+    .highlight-last {
+      box-shadow: inset 0 0 0 3px lime !important;
     }
 
-    /* Legal moves: yellow overlay under piece */
-    .legal-move::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(255, 255, 0, 0.32);
-      z-index: 0;
-      pointer-events: none;
+    #info {
+      margin-top: 15px;
+      opacity: 0.8;
     }
-
-    /* Last move: thicker, lighter green highlight under piece */
-    .last-move::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: rgba(150, 255, 150, 0.45);
-      box-shadow: 0 0 6px rgba(150, 255, 150, 0.9);
-      z-index: 0;
-      pointer-events: none;
-    }
-
-    .last-move.legal-move::after {
-      background: rgba(200, 255, 120, 0.55);
-      box-shadow: 0 0 8px rgba(200, 255, 120, 0.9);
-    }
-
-    .square img {
-      max-width: 90%;
-      max-height: 90%;
-      z-index: 2;
-      position: relative;
-      /* pointer-events: none;  <-- keep removed so onpointerdown works */
-    }
-
-    /* Drag clone that follows the cursor */
-    .drag-piece {
-      position: absolute;
-      width: 64px;
-      height: 64px;
-      z-index: 9999;
-      pointer-events: none;
-    }
-
-    #info { margin-top: 15px; opacity: 0.8; }
   </style>
 </head>
-
 <body>
 
   <h1>School Chess</h1>
-  <div id="board" class="board"></div>
+
+  <div id="board"></div>
   <div id="info"></div>
 
 <script>
-const PIECE_URL = "https://www.chess.com/chess-themes/pieces/neo/150";
+  const game = new Chess();
+  let board = null;
 
-function pieceImage(piece) {
-  return `${PIECE_URL}/${piece.color}${piece.type}.png`;
-}
+  let selectedSquare = null;
+  let lastMove = null;
+  const infoEl = document.getElementById("info");
 
-const game = new Chess();
+  function clearHighlights() {
+    $("#board .square-55d63")
+      .removeClass("highlight-selected")
+      .removeClass("highlight-legal");
+  }
 
-let selected = null;
-let legalMoves = [];
-let lastMove = null;
+  function applyLastMove() {
+    $("#board .square-55d63").removeClass("highlight-last");
 
-let dragging = false;
-let dragFrom = null;
-let dragClone = null;
-let dragSourceImg = null;
+    if (!lastMove) return;
 
-const boardEl = document.getElementById("board");
-const infoEl = document.getElementById("info");
+    $(`.square-${lastMove.from}`).addClass("highlight-last");
+    $(`.square-${lastMove.to}`).addClass("highlight-last");
+  }
 
-function sqName(file, rank) {
-  return String.fromCharCode(97 + file) + (8 - rank);
-}
+  function highlightMoves(square) {
+    clearHighlights();
 
-function renderBoard() {
-  boardEl.innerHTML = "";
+    $(`.square-${square}`).addClass("highlight-selected");
 
-  for (let r = 0; r < 8; r++) {
-    for (let f = 0; f < 8; f++) {
-      const sq = sqName(f, r);
+    const moves = game.moves({ square, verbose: true });
+    moves.forEach(m => {
+      $(`.square-${m.to}`).addClass("highlight-legal");
+    });
+  }
 
-      const div = document.createElement("div");
-      div.classList.add("square", (r + f) % 2 === 0 ? "light" : "dark");
-      div.dataset.square = sq;
+  function onDragStart(source, piece) {
+    if (game.game_over()) return false;
 
-      const piece = game.get(sq);
-      if (piece) {
-        const img = document.createElement("img");
-        img.src = pieceImage(piece);
-        img.draggable = false;
-
-        // pointerdown on the IMG starts drag
-        img.onpointerdown = (e) => startDrag(e, sq);
-
-        div.appendChild(img);
-      }
-
-      if (sq === selected) div.classList.add("selected");
-      if (legalMoves.includes(sq)) div.classList.add("legal-move");
-      if (lastMove && (lastMove.from === sq || lastMove.to === sq))
-        div.classList.add("last-move");
-
-      // Click square only if we are not in a drag operation
-      div.onclick = (e) => {
-        if (dragging) return;
-        onSquareClick(e);
-      };
-
-      boardEl.appendChild(div);
+    if ((game.turn() === "w" && piece[0] !== "w") ||
+        (game.turn() === "b" && piece[0] !== "b")) {
+      return false;
     }
-  }
-}
 
-/* ---------- CLICK LOGIC ---------- */
-
-function onSquareClick(e) {
-  const sq = e.currentTarget.dataset.square;
-  const piece = game.get(sq);
-
-  if (!selected) {
-    if (!piece || piece.color !== game.turn()) return;
-    selectSquare(sq);
-    return;
+    selectedSquare = source;
+    highlightMoves(source);
   }
 
-  if (sq === selected) {
-    clearSelection();
-    return;
-  }
+  function onDrop(source, target) {
+    clearHighlights();
 
-  if (piece && piece.color === game.turn() && !legalMoves.includes(sq)) {
-    selectSquare(sq);
-    return;
-  }
+    const move = game.move({
+      from: source,
+      to: target,
+      promotion: "q"
+    });
 
-  if (legalMoves.includes(sq)) {
-    makeMove(selected, sq);
-    return;
-  }
+    if (!move) {
+      applyLastMove();
+      selectedSquare = null;
+      return "snapback";
+    }
 
-  clearSelection();
-}
-
-function selectSquare(sq) {
-  const piece = game.get(sq);
-  if (!piece) return;
-  selected = sq;
-  legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
-  infoEl.textContent = `Selected ${piece.color} ${piece.type} on ${sq}`;
-  renderBoard();
-}
-
-function clearSelection() {
-  selected = null;
-  legalMoves = [];
-  infoEl.textContent = "";
-  renderBoard();
-}
-
-function makeMove(from, to) {
-  const move = game.move({ from, to, promotion: "q" });
-
-  if (move) {
     lastMove = { from: move.from, to: move.to };
+    applyLastMove();
+
+    infoEl.textContent =
+      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+
+    selectedSquare = null;
   }
 
-  clearSelection();
-}
-
-/* ---------- DRAG LOGIC ---------- */
-
-function startDrag(e, sq) {
-  const piece = game.get(sq);
-  if (!piece || piece.color !== game.turn()) return;
-
-  e.preventDefault();
-  e.stopPropagation();
-
-  dragging = true;
-  dragFrom = sq;
-
-  // normal select so highlights appear
-  selectSquare(sq);
-
-  // find the UPDATED image after render
-  const squareEl = boardEl.querySelector(`[data-square="${sq}"]`);
-  const img = squareEl.querySelector("img");
-
-  dragSourceImg = img;
-  dragSourceImg.style.opacity = "0";
-
-  // create clone
-  dragClone = img.cloneNode(true);
-  dragClone.classList.add("drag-piece");
-
-  // IMPORTANT: use fixed pos so overflow:hidden doesn't hide it
-  dragClone.style.position = "fixed";
-
-  // add to root so it's always visible
-  document.documentElement.appendChild(dragClone);
-
-  moveDrag(e);
-
-  window.addEventListener("pointermove", moveDrag);
-  window.addEventListener("pointerup", endDrag);
-}
-
-function moveDrag(e) {
-  if (!dragging || !dragClone) return;
-
-  const size = 64;
-  dragClone.style.left = (e.clientX - size / 2) + "px";
-  dragClone.style.top  = (e.clientY - size / 2) + "px";
-}
-
-function endDrag(e) {
-  if (!dragging) return;
-  dragging = false;
-
-  if (dragClone) dragClone.remove();
-  dragClone = null;
-
-  if (dragSourceImg) {
-    dragSourceImg.style.opacity = "1";
-    dragSourceImg = null;
+  function onSnapEnd() {
+    board.position(game.fen());
   }
 
-  const dropSq = getSquareFromPoint(e.clientX, e.clientY);
+  // CLICK mode (school laptops hate drag sometimes)
+  $("#board").on("click", ".square-55d63", function () {
+    const sq = $(this).attr("data-square");
+    const piece = game.get(sq);
 
-  if (dropSq && legalMoves.includes(dropSq)) {
-    makeMove(dragFrom, dropSq);
-  } else if (dropSq === dragFrom) {
-    selectSquare(dragFrom);
-  } else {
-    clearSelection();
-  }
+    if (selectedSquare === sq) {
+      selectedSquare = null;
+      clearHighlights();
+      applyLastMove();
+      infoEl.textContent = "";
+      return;
+    }
 
-  dragFrom = null;
+    if (!selectedSquare) {
+      if (!piece || piece.color !== game.turn()) return;
+      selectedSquare = sq;
+      highlightMoves(sq);
+      infoEl.textContent =
+        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      return;
+    }
 
-  window.removeEventListener("pointermove", moveDrag);
-  window.removeEventListener("pointerup", endDrag);
-}
+    const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
 
-renderBoard();
+    if (!move) {
+      if (piece && piece.color === game.turn()) {
+        selectedSquare = sq;
+        highlightMoves(sq);
+        infoEl.textContent =
+          `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      } else {
+        selectedSquare = null;
+        clearHighlights();
+        applyLastMove();
+        infoEl.textContent = "";
+      }
+      board.position(game.fen());
+      return;
+    }
+
+    lastMove = { from: move.from, to: move.to };
+    clearHighlights();
+    applyLastMove();
+    selectedSquare = null;
+    board.position(game.fen());
+
+    infoEl.textContent =
+      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+  });
+
+  board = Chessboard("board", {
+    draggable: true,
+    position: "start",
+    pieceTheme: piece => {
+      return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
+    },
+    onDragStart,
+    onDrop,
+    onSnapEnd
+  });
+
+  applyLastMove();
 </script>
 
 </body>
