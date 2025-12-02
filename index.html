@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>School Chess Board</title>
+
+  <!-- Chess.js for move legality + turn logic -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.13.4/chess.min.js"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #111;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #f5f5f5;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+      font-size: 1.4rem;
+    }
+
+    .subtitle {
+      font-size: 0.9rem;
+      opacity: 0.85;
+      margin-bottom: 14px;
+      text-align: center;
+    }
+
+    .board-wrapper {
+      padding: 8px;
+      background: #222;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 0, 0, 0.7);
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(8, 64px);
+      grid-template-rows: repeat(8, 64px);
+      border: 4px solid #222;
+    }
+
+    .square {
+      width: 64px;
+      height: 64px;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.05s ease;
+    }
+
+    .square.light {
+      background: #eeeed2; /* light tan (chess.com style) */
+    }
+
+    .square.dark {
+      background: #769656; /* green (chess.com style) */
+    }
+
+    .square:active {
+      transform: scale(0.97);
+    }
+
+    .square img {
+      max-width: 90%;
+      max-height: 90%;
+      pointer-events: none;
+    }
+
+    /* Selected piece square: orange outline */
+    .square.selected {
+      outline: 3px solid #ff9800;
+      outline-offset: -3px;
+    }
+
+    /* Legal move squares: yellow highlight */
+    .square.legal-move {
+      box-shadow: inset 0 0 0 4px rgba(255, 235, 59, 0.9);
+    }
+
+    /* Last move from/to: green highlight */
+    .square.last-move {
+      box-shadow: inset 0 0 0 4px rgba(76, 175, 80, 0.95);
+    }
+
+    /* If a square is both legal-move and last-move, make it more obvious */
+    .square.last-move.legal-move {
+      box-shadow:
+        inset 0 0 0 4px rgba(76, 175, 80, 0.95),
+        inset 0 0 0 7px rgba(255, 235, 59, 0.9);
+    }
+
+    .info {
+      margin-top: 10px;
+      font-size: 0.86rem;
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <h1>Simple Chess (GitHub Pages)</h1>
+  <div class="subtitle">
+    Click a piece to select (orange). Yellow = legal moves. Last move squares are green.
+  </div>
+
+  <div class="board-wrapper">
+    <div id="board" class="board"></div>
+  </div>
+
+  <div class="info" id="info"></div>
+
+  <script>
+    const game = new Chess(); // chess.js instance
+
+    const boardEl = document.getElementById("board");
+    const infoEl = document.getElementById("info");
+
+    let selectedSquare = null;        // e.g. "e2"
+    let legalMovesForSelected = [];   // array of target squares, e.g. ["e4","e3"]
+    let lastMove = null;              // { from: "e2", to: "e4" }
+
+    // Map piece from chess.js -> image path
+    function pieceImage(piece) {
+      // piece = { type: 'p', color: 'w' | 'b' }
+      const colorPrefix = piece.color === "w" ? "w" : "b";
+      const type = piece.type; // p, n, b, r, q, k
+      // You will create these image files yourself in /images
+      return `images/${colorPrefix}${type}.png`;
+    }
+
+    function squareName(file, rank) {
+      // file: 0..7 -> a..h, rank: 0..7 (from 8 down to 1)
+      const fileChar = String.fromCharCode("a".charCodeAt(0) + file);
+      const rankChar = String(8 - rank);
+      return fileChar + rankChar;
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = "";
+
+      // Ranks 8 -> 1 (rank index 0 is rank 8)
+      for (let rank = 0; rank < 8; rank++) {
+        for (let file = 0; file < 8; file++) {
+          const sq = squareName(file, rank);
+
+          const squareDiv = document.createElement("div");
+          squareDiv.classList.add("square");
+
+          const isLight = (rank + file) % 2 === 0;
+          squareDiv.classList.add(isLight ? "light" : "dark");
+
+          squareDiv.dataset.square = sq;
+          squareDiv.title = sq;
+
+          const piece = game.get(sq);
+          if (piece) {
+            const img = document.createElement("img");
+            img.src = pieceImage(piece); // e.g. images/wp.png
+            img.alt = piece.color + piece.type;
+            squareDiv.appendChild(img);
+          }
+
+          // Selected square
+          if (selectedSquare === sq) {
+            squareDiv.classList.add("selected");
+          }
+
+          // Legal moves for selected piece
+          if (legalMovesForSelected.includes(sq)) {
+            squareDiv.classList.add("legal-move");
+          }
+
+          // Last move from/to
+          if (lastMove && (lastMove.from === sq || lastMove.to === sq)) {
+            squareDiv.classList.add("last-move");
+          }
+
+          squareDiv.addEventListener("click", onSquareClick);
+          boardEl.appendChild(squareDiv);
+        }
+      }
+    }
+
+    function onSquareClick(e) {
+      const sq = e.currentTarget.dataset.square;
+      const piece = game.get(sq);
+
+      // If nothing is selected yet
+      if (!selectedSquare) {
+        // No piece on that square -> ignore
+        if (!piece) {
+          return;
+        }
+        // Only allow selecting the side to move (standard behavior)
+        if (piece.color !== game.turn()) {
+          return;
+        }
+
+        selectedSquare = sq;
+        legalMovesForSelected = game
+          .moves({ square: sq, verbose: true })
+          .map(m => m.to);
+
+        infoEl.textContent =
+          `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type.toUpperCase()} on ${sq}.`;
+
+        renderBoard();
+        return;
+      }
+
+      // If clicking the same square again -> deselect
+      if (sq === selectedSquare) {
+        selectedSquare = null;
+        legalMovesForSelected = [];
+        infoEl.textContent = "";
+        renderBoard();
+        return;
+      }
+
+      // If click is on another piece of the side to move -> change selection
+      if (piece && piece.color === game.turn() && !legalMovesForSelected.includes(sq)) {
+        selectedSquare = sq;
+        legalMovesForSelected = game
+          .moves({ square: sq, verbose: true })
+          .map(m => m.to);
+
+        infoEl.textContent =
+          `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type.toUpperCase()} on ${sq}.`;
+
+        renderBoard();
+        return;
+      }
+
+      // Try to move if the target square is a legal move
+      if (legalMovesForSelected.includes(sq)) {
+        const move = game.move({
+          from: selectedSquare,
+          to: sq,
+          promotion: "q" // auto-queen; fine for simple board
+        });
+
+        if (move) {
+          lastMove = { from: move.from, to: move.to };
+          infoEl.textContent =
+            `Moved ${move.color === "w" ? "White" : "Black"} ${move.piece.toUpperCase()} from ${move.from} to ${move.to}.`;
+        }
+
+        // Clear selection after move
+        selectedSquare = null;
+        legalMovesForSelected = [];
+        renderBoard();
+        return;
+      }
+
+      // Otherwise: click somewhere irrelevant -> clear selection
+      selectedSquare = null;
+      legalMovesForSelected = [];
+      infoEl.textContent = "";
+      renderBoard();
+    }
+
+    // Initial render
+    renderBoard();
+  </script>
+</body>
+</html>
