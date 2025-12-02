@@ -20,10 +20,7 @@
       font-family: system-ui, sans-serif;
     }
 
-    h1 {
-      margin-bottom: 20px;
-      font-size: 28px;
-    }
+    h1 { margin-bottom: 20px; }
 
     .board {
       display: grid;
@@ -39,231 +36,245 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      cursor: pointer;
       position: relative;
+      cursor: pointer;
       user-select: none;
-
-      /* Ensures highlights go UNDER the piece */
       z-index: 0;
     }
 
-    /* Chess.com colors */
     .light { background: #eeeed2; }
     .dark  { background: #769656; }
 
-    /* Selected (orange outline) stays on the square, under piece */
     .selected {
       outline: 3px solid orange;
       outline-offset: -3px;
     }
 
-    /* LEGAL MOVE highlight (yellow) under piece */
     .legal-move::after {
       content: "";
       position: absolute;
       inset: 0;
       background: rgba(255, 255, 0, 0.32);
-      pointer-events: none;
       z-index: 0;
+      pointer-events: none;
     }
 
-    /* LAST MOVE highlight (darker green) under piece */
     .last-move::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(20, 94, 20, 0.45); /* DARK green */
-      pointer-events: none;
+      background: rgba(20, 94, 20, 0.45);
       z-index: 0;
+      pointer-events: none;
     }
 
-    /* When both apply */
-    .last-move.legal-move::after {
-      background: rgba(120, 150, 0, 0.45);
-    }
-
-    /* PIECES ALWAYS ABOVE HIGHLIGHTS */
     .square img {
       max-width: 90%;
       max-height: 90%;
-      pointer-events: none;
+      z-index: 2;
       position: relative;
-      z-index: 2; /* over all highlights */
     }
 
-    .drag-piece {
-      position: absolute;
+    /* DRAGGING: we move the actual piece */
+    .dragging {
+      position: absolute !important;
       pointer-events: none;
-      width: 64px;
-      height: 64px;
-      z-index: 999; /* top of EVERYTHING */
+      z-index: 999;
     }
 
-    #info {
-      margin-top: 15px;
-      opacity: 0.8;
-    }
+    #info { margin-top: 15px; opacity: 0.8; }
   </style>
 </head>
 
 <body>
 
   <h1>School Chess</h1>
-
   <div id="board" class="board"></div>
   <div id="info"></div>
 
-  <script>
-    const PIECE_URL = "https://www.chess.com/chess-themes/pieces/neo/150";
+<script>
+const PIECE_URL = "https://www.chess.com/chess-themes/pieces/neo/150";
 
-    function pieceImage(piece) {
-      return `${PIECE_URL}/${piece.color}${piece.type}.png`;
-    }
+function pieceImage(piece) {
+  return `${PIECE_URL}/${piece.color}${piece.type}.png`;
+}
 
-    const game = new Chess();
-    let selected = null;
-    let legalMoves = [];
-    let lastMove = null;
+const game = new Chess();
 
-    let dragging = false;
-    let dragImg = null;
-    let dragFrom = null;
+let selected = null;
+let legalMoves = [];
+let lastMove = null;
 
-    const boardEl = document.getElementById("board");
-    const infoEl = document.getElementById("info");
+let dragging = false;
+let draggedImg = null;
+let dragFrom = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
 
-    function sqName(file, rank) {
-      return String.fromCharCode(97 + file) + (8 - rank);
-    }
+const boardEl = document.getElementById("board");
+const infoEl = document.getElementById("info");
 
-    function renderBoard() {
-      boardEl.innerHTML = "";
+function sqName(file, rank) {
+  return String.fromCharCode(97 + file) + (8 - rank);
+}
 
-      for (let r = 0; r < 8; r++) {
-        for (let f = 0; f < 8; f++) {
-          const sq = sqName(f, r);
-          const div = document.createElement("div");
-          div.classList.add("square", (r + f) % 2 === 0 ? "light" : "dark");
-          div.dataset.square = sq;
+function renderBoard() {
+  boardEl.innerHTML = "";
 
-          const piece = game.get(sq);
-          if (piece) {
-            const img = document.createElement("img");
-            img.src = pieceImage(piece);
-            img.draggable = false;
-            div.appendChild(img);
+  for (let r = 0; r < 8; r++) {
+    for (let f = 0; f < 8; f++) {
+      const sq = sqName(f, r);
 
-            div.onpointerdown = (e) => startDrag(e, sq, piece);
-          }
+      const div = document.createElement("div");
+      div.classList.add("square", (r + f) % 2 === 0 ? "light" : "dark");
+      div.dataset.square = sq;
 
-          if (sq === selected) div.classList.add("selected");
-          if (legalMoves.includes(sq)) div.classList.add("legal-move");
-          if (lastMove && (lastMove.from === sq || lastMove.to === sq))
-            div.classList.add("last-move");
-
-          div.addEventListener("click", onClick);
-          boardEl.appendChild(div);
-        }
-      }
-    }
-
-    function onClick(e) {
-      const sq = e.currentTarget.dataset.square;
       const piece = game.get(sq);
+      if (piece) {
+        const img = document.createElement("img");
+        img.src = pieceImage(piece);
+        img.draggable = false;
 
-      if (dragging) return;
+        div.appendChild(img);
 
-      if (!selected) {
-        if (!piece || piece.color !== game.turn()) return;
-        selectSquare(sq);
-        return;
+        // Attach drag events to the actual image
+        img.onpointerdown = (e) => startDrag(e, sq, img, piece);
       }
 
-      if (sq === selected) {
-        clearSelection();
-        return;
-      }
+      if (sq === selected) div.classList.add("selected");
+      if (legalMoves.includes(sq)) div.classList.add("legal-move");
+      if (lastMove && (lastMove.from === sq || lastMove.to === sq))
+        div.classList.add("last-move");
 
-      if (piece && piece.color === game.turn() && !legalMoves.includes(sq)) {
-        selectSquare(sq);
-        return;
-      }
+      div.onclick = onClick;
 
-      if (legalMoves.includes(sq)) {
-        makeMove(selected, sq);
-        return;
-      }
-
-      clearSelection();
+      boardEl.appendChild(div);
     }
+  }
+}
 
-    function selectSquare(sq) {
-      const piece = game.get(sq);
-      selected = sq;
-      legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
-      infoEl.textContent = `Selected ${piece.color} ${piece.type} on ${sq}`;
-      renderBoard();
-    }
+function onClick(e) {
+  if (dragging) return;
 
-    function clearSelection() {
-      selected = null;
-      legalMoves = [];
-      infoEl.textContent = "";
-      renderBoard();
-    }
+  const sq = e.currentTarget.dataset.square;
+  const piece = game.get(sq);
 
-    function makeMove(from, to) {
-      const move = game.move({ from, to, promotion: "q" });
-      if (move) lastMove = { from: move.from, to: move.to };
-      clearSelection();
-    }
+  if (!selected) {
+    if (!piece || piece.color !== game.turn()) return;
+    selectSquare(sq);
+    return;
+  }
 
-    function startDrag(e, sq, piece) {
-      if (piece.color !== game.turn()) return;
+  if (sq === selected) {
+    // clicking same square clears
+    clearSelection();
+    return;
+  }
 
-      dragging = true;
-      dragFrom = sq;
-      selectSquare(sq);
+  if (piece && piece.color === game.turn() && !legalMoves.includes(sq)) {
+    selectSquare(sq);
+    return;
+  }
 
-      dragImg = document.createElement("img");
-      dragImg.src = pieceImage(piece);
-      dragImg.classList.add("drag-piece");
-      document.body.appendChild(dragImg);
+  if (legalMoves.includes(sq)) {
+    makeMove(selected, sq);
+    return;
+  }
 
-      moveDrag(e);
+  clearSelection();
+}
 
-      window.onpointermove = moveDrag;
-      window.onpointerup = endDrag;
-    }
+function selectSquare(sq) {
+  const piece = game.get(sq);
+  selected = sq;
+  legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
+  infoEl.textContent = `Selected ${piece.color} ${piece.type} on ${sq}`;
+  renderBoard();
+}
 
-    function moveDrag(e) {
-      if (!dragging || !dragImg) return;
-      dragImg.style.left = e.pageX - 32 + "px";
-      dragImg.style.top = e.pageY - 32 + "px";
-    }
+function clearSelection() {
+  selected = null;
+  legalMoves = [];
+  infoEl.textContent = "";
+  renderBoard();
+}
 
-    function endDrag(e) {
-      if (!dragging) return;
+function makeMove(from, to) {
+  const move = game.move({ from, to, promotion: "q" });
 
-      dragging = false;
-      dragImg.remove();
-      dragImg = null;
+  if (move) {
+    lastMove = { from: move.from, to: move.to };
+  }
 
-      const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
-      const dropSq = elementUnder?.dataset?.square;
+  clearSelection();
+}
 
-      if (dropSq && legalMoves.includes(dropSq)) {
-        makeMove(dragFrom, dropSq);
-      } else {
-        clearSelection();
-      }
+/* --------------------- DRAGGING ---------------------- */
 
-      window.onpointermove = null;
-      window.onpointerup = null;
-    }
+function startDrag(e, sq, img, piece) {
+  if (piece.color !== game.turn()) return;
 
-    renderBoard();
-  </script>
+  dragging = true;
+  dragFrom = sq;
 
+  // Select piece and show legal moves
+  selectSquare(sq);
+
+  // Move the ACTUAL board piece, not a clone
+  draggedImg = img;
+  draggedImg.classList.add("dragging");
+
+  // Calculate pointer offset so drag feels natural
+  const rect = img.getBoundingClientRect();
+  dragOffsetX = e.clientX - rect.left;
+  dragOffsetY = e.clientY - rect.top;
+
+  moveDrag(e);
+
+  window.onpointermove = moveDrag;
+  window.onpointerup = endDrag;
+}
+
+function moveDrag(e) {
+  if (!dragging || !draggedImg) return;
+
+  draggedImg.style.left = (e.pageX - dragOffsetX) + "px";
+  draggedImg.style.top = (e.pageY - dragOffsetY) + "px";
+}
+
+function endDrag(e) {
+  if (!dragging) return;
+
+  dragging = false;
+
+  draggedImg.classList.remove("dragging");
+  draggedImg.style.left = "";
+  draggedImg.style.top = "";
+
+  const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
+  const dropSq = elementUnder?.dataset?.square;
+
+  // 1. Dropped on valid move square → move
+  if (dropSq && legalMoves.includes(dropSq)) {
+    makeMove(dragFrom, dropSq);
+  }
+  // 2. Dropped back on same square → KEEP selection
+  else if (dropSq === dragFrom) {
+    selectSquare(dragFrom);
+  }
+  // 3. Anywhere else → just deselect
+  else {
+    clearSelection();
+  }
+
+  draggedImg = null;
+  dragFrom = null;
+
+  window.onpointermove = null;
+  window.onpointerup = null;
+}
+
+renderBoard();
+</script>
 </body>
 </html>
