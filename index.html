@@ -123,8 +123,6 @@ let dragging = false;
 let dragFrom = null;
 let dragClone = null;
 let dragSourceImg = null;
-let dragOffsetX = 0;
-let dragOffsetY = 0;
 
 const boardEl = document.getElementById("board");
 const infoEl = document.getElementById("info");
@@ -150,7 +148,6 @@ function renderBoard() {
         img.src = pieceImage(piece);
         img.draggable = false;
 
-        // pointerdown on the IMG starts drag
         img.onpointerdown = (e) => startDrag(e, sq, img, piece);
 
         div.appendChild(img);
@@ -161,7 +158,6 @@ function renderBoard() {
       if (lastMove && (lastMove.from === sq || lastMove.to === sq))
         div.classList.add("last-move");
 
-      // Click square only if we are not in a drag operation
       div.onclick = (e) => {
         if (dragging) return;
         onSquareClick(e);
@@ -230,7 +226,6 @@ function makeMove(from, to) {
 /* ---------- DRAG LOGIC ---------- */
 
 function startDrag(e, sq, img, piece) {
-  // Only drag if it's that side's turn
   if (piece.color !== game.turn()) return;
 
   e.preventDefault();
@@ -239,23 +234,19 @@ function startDrag(e, sq, img, piece) {
   dragging = true;
   dragFrom = sq;
 
-  // Select the piece (shows orange + legal moves)
+  // show highlights
   selectSquare(sq);
 
-  // Hide the original piece while dragging
+  // hide original
   dragSourceImg = img;
   dragSourceImg.style.opacity = "0";
 
-  // Create a clone that follows the cursor
+  // clone follows cursor
   dragClone = img.cloneNode(true);
   dragClone.classList.add("drag-piece");
   document.body.appendChild(dragClone);
 
-  const rect = img.getBoundingClientRect();
-  dragOffsetX = e.clientX - rect.left;
-  dragOffsetY = e.clientY - rect.top;
-
-  moveDrag(e);
+  moveDrag(e); // position immediately
 
   window.addEventListener("pointermove", moveDrag);
   window.addEventListener("pointerup", endDrag);
@@ -264,8 +255,9 @@ function startDrag(e, sq, img, piece) {
 function moveDrag(e) {
   if (!dragging || !dragClone) return;
 
-  dragClone.style.left = (e.pageX - dragOffsetX) + "px";
-  dragClone.style.top = (e.pageY - dragOffsetY) + "px";
+  const size = 64; // square size
+  dragClone.style.left = (e.pageX - size / 2) + "px";
+  dragClone.style.top  = (e.pageY - size / 2) + "px";
 }
 
 function getSquareFromPoint(x, y) {
@@ -280,13 +272,11 @@ function endDrag(e) {
   if (!dragging) return;
   dragging = false;
 
-  // Remove drag clone
   if (dragClone) {
     dragClone.remove();
     dragClone = null;
   }
 
-  // Reveal the original piece again
   if (dragSourceImg) {
     dragSourceImg.style.opacity = "1";
     dragSourceImg = null;
@@ -295,13 +285,10 @@ function endDrag(e) {
   const dropSq = getSquareFromPoint(e.clientX, e.clientY);
 
   if (dropSq && legalMoves.includes(dropSq)) {
-    // Valid move
     makeMove(dragFrom, dropSq);
   } else if (dropSq === dragFrom) {
-    // Dropped on same square → keep selection & highlights
     selectSquare(dragFrom);
   } else {
-    // Anywhere else → clear selection
     clearSelection();
   }
 
@@ -313,6 +300,7 @@ function endDrag(e) {
 
 renderBoard();
 </script>
+
 
 </body>
 </html>
