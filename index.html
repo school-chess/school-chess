@@ -4,17 +4,17 @@
   <meta charset="UTF-8" />
   <title>School Chess</title>
 
-  <!-- Chessboard.js CSS (official unpkg link) -->
+  <!-- Chessboard.js CSS -->
   <link rel="stylesheet"
         href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
 
   <!-- jQuery MUST load before chessboard.js -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 
-  <!-- Chessboard.js (board UI) -->
+  <!-- Chessboard.js -->
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
 
-  <!-- chess.js (engine / rules) -->
+  <!-- chess.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
   <style>
@@ -35,187 +35,210 @@
     }
 
     #board {
-      width: 512px; /* 8 * 64 */
+      width: 512px; /* 8 × 64 */
     }
 
     #info {
       margin-top: 15px;
-      opacity: 0.8;
+      opacity: 0.85;
     }
 
-    /* Chess.com-style colors for chessboard.js */
+    /* Board colors like chess.com */
     .white-1e1d7 { background-color: #eeeed2 !important; }
     .black-3c85d { background-color: #769656 !important; }
 
-    /* Highlight classes */
+    /* Highlight styles */
     .highlight-selected {
-      box-shadow: inset 0 0 0 3px orange !important;
+      background-color: rgba(255, 165, 0, 0.7) !important; /* orange */
     }
-
     .highlight-legal {
-      box-shadow: inset 0 0 0 3px yellow !important;
+      background-color: rgba(255, 255, 0, 0.75) !important; /* yellow */
+    }
+    .highlight-last {
+      background-color: #9db336 !important; /* thick green */
     }
 
-    .highlight-last {
-      box-shadow: inset 0 0 0 3px lime !important;
+    /* ---------- NOTATION COLOR FIX ---------- */
+    /* notation on LIGHT squares = GREEN */
+    .white-1e1d7 .notation-322f9 {
+      color: #3fa900 !important;
+      font-weight: bold;
+    }
+
+    /* notation on DARK squares = WHITE */
+    .black-3c85d .notation-322f9 {
+      color: #ffffff !important;
+      font-weight: bold;
     }
   </style>
 
-  <!-- Optional: stop favicon 404 spam, not required -->
   <link rel="icon" href="data:,">
 </head>
 <body>
 
   <h1>School Chess</h1>
+
   <div id="board"></div>
   <div id="info"></div>
 
-  <script>
-    const game = new Chess();
-    let board = null;
+<script>
+  const game = new Chess();
+  let board = null;
 
-    let selectedSquare = null;
-    let lastMove = null;
-    const infoEl = document.getElementById("info");
+  let selectedSquare = null;
+  let lastMove = null;
+  let infoEl = document.getElementById("info");
 
-    function clearSelectionHighlights() {
-      $("#board .square-55d63")
-        .removeClass("highlight-selected")
-        .removeClass("highlight-legal");
+  /* ======== HIGHLIGHT FUNCTIONS ======== */
+
+  function clearSelectionHighlights() {
+    $("#board .square-55d63")
+      .removeClass("highlight-selected")
+      .removeClass("highlight-legal");
+  }
+
+  function applyLastMoveHighlight() {
+    $("#board .square-55d63").removeClass("highlight-last");
+
+    if (!lastMove) return;
+
+    $(`.square-${lastMove.from}`).addClass("highlight-last");
+    $(`.square-${lastMove.to}`).addClass("highlight-last");
+  }
+
+  function highlightLegalMoves(square) {
+    clearSelectionHighlights();
+
+    // selected square (orange)
+    $(`.square-${square}`).addClass("highlight-selected");
+
+    const moves = game.moves({ square, verbose: true });
+    moves.forEach(m => {
+      // yellow legal highlight (this overrides green)
+      $(`.square-${m.to}`).addClass("highlight-legal");
+    });
+  }
+
+  /* ======== DRAG-TO-MOVE ======== */
+
+  function onDragStart(source, piece) {
+    if (game.game_over()) return false;
+
+    // only drag your color
+    if ((game.turn() === "w" && piece[0] !== "w") ||
+        (game.turn() === "b" && piece[0] !== "b")) {
+      return false;
     }
 
-    function applyLastMoveHighlight() {
-      $("#board .square-55d63").removeClass("highlight-last");
-      if (!lastMove) return;
+    selectedSquare = source;
+    highlightLegalMoves(source);
+  }
 
-      $(`.square-${lastMove.from}`).addClass("highlight-last");
-      $(`.square-${lastMove.to}`).addClass("highlight-last");
-    }
+  function onDrop(source, target) {
+    clearSelectionHighlights();
 
-    function highlightLegalMoves(square) {
-      clearSelectionHighlights();
-      $(`.square-${square}`).addClass("highlight-selected");
-
-      const moves = game.moves({ square, verbose: true });
-      moves.forEach(m => {
-        $(`.square-${m.to}`).addClass("highlight-legal");
-      });
-    }
-
-    function onDragStart(source, piece) {
-      // game over -> no drag
-      if (game.game_over()) return false;
-
-      // only drag own color
-      if ((game.turn() === "w" && piece[0] !== "w") ||
-          (game.turn() === "b" && piece[0] !== "b")) {
-        return false;
-      }
-
-      selectedSquare = source;
-      highlightLegalMoves(source);
-    }
-
-    function onDrop(source, target) {
-      clearSelectionHighlights();
-
-      const move = game.move({
-        from: source,
-        to: target,
-        promotion: "q"
-      });
-
-      // illegal -> snap back
-      if (!move) {
-        applyLastMoveHighlight();
-        selectedSquare = null;
-        return "snapback";
-      }
-
-      lastMove = { from: move.from, to: move.to };
-      applyLastMoveHighlight();
-
-      infoEl.textContent =
-        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-
-      selectedSquare = null;
-    }
-
-    function onSnapEnd() {
-      board.position(game.fen());
-    }
-
-    // Click support (good on school laptops / touchpads)
-    $("#board").on("click", ".square-55d63", function () {
-      const sq = $(this).attr("data-square");
-      const piece = game.get(sq);
-
-      // clicking the selected square -> deselect
-      if (selectedSquare === sq) {
-        selectedSquare = null;
-        clearSelectionHighlights();
-        applyLastMoveHighlight();
-        infoEl.textContent = "";
-        return;
-      }
-
-      // no selection yet -> select if it's our piece
-      if (!selectedSquare) {
-        if (!piece || piece.color !== game.turn()) return;
-        selectedSquare = sq;
-        highlightLegalMoves(sq);
-        infoEl.textContent =
-          `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-        return;
-      }
-
-      // we have a selected square -> try to move from it to sq
-      const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
-
-      if (!move) {
-        // maybe clicked another of our own pieces -> reselect
-        if (piece && piece.color === game.turn()) {
-          selectedSquare = sq;
-          highlightLegalMoves(sq);
-          infoEl.textContent =
-            `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-        } else {
-          // invalid click -> clear selection
-          selectedSquare = null;
-          clearSelectionHighlights();
-          applyLastMoveHighlight();
-          infoEl.textContent = "";
-        }
-        board.position(game.fen());
-        return;
-      }
-
-      // legal move
-      lastMove = { from: move.from, to: move.to };
-      clearSelectionHighlights();
-      applyLastMoveHighlight();
-      selectedSquare = null;
-      board.position(game.fen());
-
-      infoEl.textContent =
-        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+    const move = game.move({
+      from: source,
+      to: target,
+      promotion: "q"
     });
 
-    // Initialize board AFTER everything above is defined
-    board = Chessboard("board", {
-      draggable: true,
-      position: "start",
-      pieceTheme: piece => {
-        // piece is like "wP" -> chess.com Neo needs wp.png, bk.png, etc.
-        return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
-      },
-      onDragStart,
-      onDrop,
-      onSnapEnd
-    });
+    if (!move) {
+      // illegal
+      applyLastMoveHighlight();
+      selectedSquare = null;
+      return "snapback";
+    }
 
+    lastMove = { from: move.from, to: move.to };
     applyLastMoveHighlight();
-  </script>
+
+    infoEl.textContent =
+      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+
+    selectedSquare = null;
+  }
+
+  function onSnapEnd() {
+    board.position(game.fen());
+  }
+
+  /* ======== CLICK-TO-MOVE ======== */
+
+  $("#board").on("click", ".square-55d63", function () {
+    const sq = $(this).attr("data-square");
+    const piece = game.get(sq);
+
+    // click the same square again => deselect
+    if (selectedSquare === sq) {
+      selectedSquare = null;
+      clearSelectionHighlights();
+      applyLastMoveHighlight();
+      infoEl.textContent = "";
+      return;
+    }
+
+    // nothing selected yet
+    if (!selectedSquare) {
+      if (!piece || piece.color !== game.turn()) return;
+
+      selectedSquare = sq;
+      highlightLegalMoves(sq);
+      infoEl.textContent =
+        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      return;
+    }
+
+    // try to move
+    const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
+
+    if (move) {
+      lastMove = { from: move.from, to: move.to };
+      clearSelectionHighlights();
+      applyLastMoveHighlight();
+      selectedSquare = null;
+
+      board.position(game.fen());
+
+      infoEl.textContent =
+        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+      return;
+    }
+
+    // Illegal move:
+    // If clicking another friendly piece, reselect that piece
+    if (piece && piece.color === game.turn()) {
+      selectedSquare = sq;
+      highlightLegalMoves(sq);
+      infoEl.textContent =
+        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      return;
+    }
+
+    // Otherwise clear selection
+    selectedSquare = null;
+    clearSelectionHighlights();
+    applyLastMoveHighlight();
+    infoEl.textContent = "";
+
+    board.position(game.fen());
+  });
+
+  /* ======== INIT BOARD ======== */
+
+  board = Chessboard("board", {
+    draggable: true,
+    position: "start",
+    pieceTheme: piece => {
+      return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
+    },
+    onDragStart,
+    onDrop,
+    onSnapEnd
+  });
+
+  applyLastMoveHighlight();
+</script>
 
 </body>
 </html>
