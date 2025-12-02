@@ -47,23 +47,23 @@
     .white-1e1d7 { background-color: #eeeed2 !important; }
     .black-3c85d { background-color: #769656 !important; }
 
-    /* LAST MOVE = thick green highlight (fill) */
+    /* LAST MOVE = green highlight */
     .highlight-last {
       background-color: #9db336 !important;
     }
 
-    /* LEGAL MOVES = white outline, no fill */
+    /* LEGAL MOVES = white outline only */
     .highlight-legal {
       box-shadow: inset 0 0 0 3px white !important;
     }
 
-    /* SELECTED = orange fill + yellow outline that overrides other outlines */
+    /* SELECTED = orange fill ONLY (no outline) */
     .highlight-selected {
       background-color: rgba(255, 165, 0, 0.7) !important;
-      box-shadow: inset 0 0 0 4px yellow !important;
+      box-shadow: none !important;
     }
 
-    /* NO hover outline anymore */
+    /* NO hover outline at all (no :hover rule) */
 
     /* notation colors */
     .white-1e1d7 .notation-322f9 {
@@ -126,7 +126,7 @@
   function highlightLegalMoves(square) {
     clearSelectionHighlights();
 
-    // selected square: orange + yellow, no outline from legal
+    // selected square = orange fill, no outline
     const sqEl = $(`.square-${square}`);
     sqEl.addClass("highlight-selected").removeClass("highlight-legal");
 
@@ -137,13 +137,62 @@
     });
   }
 
-  /* ===== CLICK-TO-MOVE ONLY ===== */
+  /* ===== DRAG-TO-MOVE ===== */
+
+  function onDragStart(source, piece) {
+    if (game.game_over()) return false;
+
+    if ((game.turn() === "w" && piece[0] !== "w") ||
+        (game.turn() === "b" && piece[0] !== "b")) {
+      return false;
+    }
+
+    // start selection via drag
+    restoreAllNotation();
+    selectedSquare = source;
+    highlightLegalMoves(source);
+    hideNotation(source);
+    return true;
+  }
+
+  function onDrop(source, target) {
+    clearSelectionHighlights();
+
+    const move = game.move({
+      from: source,
+      to: target,
+      promotion: "q"
+    });
+
+    if (!move) {
+      applyLastMoveHighlight();
+      selectedSquare = null;
+      restoreAllNotation();
+      return "snapback";
+    }
+
+    lastMove = { from: move.from, to: move.to };
+    applyLastMoveHighlight();
+    selectedSquare = null;
+    restoreAllNotation();
+
+    infoEl.textContent =
+      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+  }
+
+  function onSnapEnd() {
+    board.position(game.fen());
+  }
+
+  /* ===== CLICK-TO-MOVE ===== */
 
   $("#board").on("click", ".square-55d63", function () {
     const sq = $(this).attr("data-square");
     const piece = game.get(sq);
 
-    // Click again on the same selected square: deselect and restore notation
+    // If click ends a drag, chessboard already handled move; we just let click handler run as usual
+
+    // Click same selected square -> deselect
     if (selectedSquare === sq) {
       selectedSquare = null;
       clearSelectionHighlights();
@@ -153,12 +202,10 @@
       return;
     }
 
-    // No square selected yet
+    // No current selection
     if (!selectedSquare) {
-      // must click a piece of side to move
       if (!piece || piece.color !== game.turn()) return;
 
-      // new selection: reset notation & hide on this square only
       restoreAllNotation();
       selectedSquare = sq;
       highlightLegalMoves(sq);
@@ -169,14 +216,13 @@
       return;
     }
 
-    // We already have a selected square -> try a move
+    // Have a selected square -> try to move by click
     const from = selectedSquare;
     const to = sq;
 
     const move = game.move({ from, to, promotion: "q" });
 
     if (move) {
-      // legal move
       lastMove = { from: move.from, to: move.to };
       selectedSquare = null;
       clearSelectionHighlights();
@@ -190,8 +236,8 @@
       return;
     }
 
-    // illegal click:
-    // if clicked another own piece, switch selection to that
+    // Illegal click:
+    // If clicked another own piece, switch selection
     if (piece && piece.color === game.turn()) {
       restoreAllNotation();
       selectedSquare = sq;
@@ -203,7 +249,7 @@
       return;
     }
 
-    // otherwise clear selection
+    // Otherwise clear selection
     selectedSquare = null;
     clearSelectionHighlights();
     applyLastMoveHighlight();
@@ -212,14 +258,17 @@
     restoreAllNotation();
   });
 
-  /* ===== INIT BOARD (click only, no drag) ===== */
+  /* ===== INIT BOARD ===== */
 
   board = Chessboard("board", {
-    draggable: false,   // <--- IMPORTANT: no drag, so clicks aren't cancelled
+    draggable: true,   // drag is back on
     position: "start",
     pieceTheme: piece => {
       return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
-    }
+    },
+    onDragStart,
+    onDrop,
+    onSnapEnd
   });
 
   applyLastMoveHighlight();
