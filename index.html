@@ -4,15 +4,11 @@
   <meta charset="UTF-8" />
   <title>School Chess</title>
 
-  <!-- Correct browser-safe version of chess.js -->
+  <!-- Browser-safe chess.js (DO NOT use the ES module version) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
   <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       min-height: 100vh;
@@ -21,18 +17,13 @@
       justify-content: center;
       align-items: center;
       background: #111;
-      color: #fff;
+      color: white;
       font-family: system-ui, sans-serif;
     }
 
     h1 {
-      margin-bottom: 8px;
-    }
-
-    .subtitle {
-      margin-bottom: 14px;
-      opacity: 0.85;
-      font-size: 0.9rem;
+      margin-bottom: 20px;
+      font-size: 28px;
     }
 
     .board {
@@ -40,6 +31,7 @@
       grid-template-columns: repeat(8, 64px);
       grid-template-rows: repeat(8, 64px);
       border: 4px solid #222;
+      background: black;
     }
 
     .square {
@@ -48,29 +40,27 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      cursor: pointer;
       position: relative;
+      cursor: pointer;
       user-select: none;
     }
 
     /* Chess.com colors */
-    .light {
-      background: #eeeed2;
-    }
-    .dark {
-      background: #769656;
-    }
+    .light { background: #eeeed2; }
+    .dark  { background: #769656; }
 
-    /* Highlight colors */
+    /* Selected piece (orange) */
     .selected {
       outline: 3px solid orange;
       outline-offset: -3px;
     }
 
+    /* Legal move squares (yellow) */
     .legal-move {
       box-shadow: inset 0 0 0 4px yellow;
     }
 
+    /* Last move (green) */
     .last-move {
       box-shadow: inset 0 0 0 4px #4caf50;
     }
@@ -82,21 +72,22 @@
     }
 
     #info {
-      margin-top: 12px;
-      font-size: 0.9rem;
-      opacity: 0.85;
+      margin-top: 15px;
+      opacity: 0.8;
     }
   </style>
 </head>
 
 <body>
+
   <h1>School Chess</h1>
 
   <div id="board" class="board"></div>
   <div id="info"></div>
 
   <script>
-    const PIECE_URL = "https://assets-themes.chess.com/image/ejgv/150";
+    // Working Chess.com piece set
+    const PIECE_URL = "https://www.chess.com/chess-themes/pieces/neo/150";
 
     function pieceImage(piece) {
       const prefix = piece.color === "w" ? "w" : "b";
@@ -104,105 +95,99 @@
     }
 
     const game = new Chess();
-    let selectedSquare = null;
+    let selected = null;
     let legalMoves = [];
     let lastMove = null;
 
     const boardEl = document.getElementById("board");
     const infoEl = document.getElementById("info");
 
-    function squareName(file, rank) {
+    // Convert file/rank → algebraic square (e.g. 0,0 → a8)
+    function sqName(file, rank) {
       return String.fromCharCode(97 + file) + (8 - rank);
     }
 
     function renderBoard() {
       boardEl.innerHTML = "";
 
-      for (let rank = 0; rank < 8; rank++) {
-        for (let file = 0; file < 8; file++) {
-          const sq = squareName(file, rank);
-          const square = document.createElement("div");
-          square.classList.add("square");
+      for (let r = 0; r < 8; r++) {
+        for (let f = 0; f < 8; f++) {
+          const sq = sqName(f, r);
+          const div = document.createElement("div");
+          div.classList.add("square");
 
-          const isLight = (rank + file) % 2 === 0;
-          square.classList.add(isLight ? "light" : "dark");
+          // Chess.com colors
+          div.classList.add((r + f) % 2 === 0 ? "light" : "dark");
 
-          square.dataset.square = sq;
+          div.dataset.square = sq;
 
           const piece = game.get(sq);
           if (piece) {
             const img = document.createElement("img");
             img.src = pieceImage(piece);
-            square.appendChild(img);
+            div.appendChild(img);
           }
 
-          if (sq === selectedSquare) square.classList.add("selected");
-          if (legalMoves.includes(sq)) square.classList.add("legal-move");
+          if (sq === selected) div.classList.add("selected");
+          if (legalMoves.includes(sq)) div.classList.add("legal-move");
+          if (lastMove && (lastMove.from === sq || lastMove.to === sq))
+            div.classList.add("last-move");
 
-          if (lastMove && (lastMove.from === sq || lastMove.to === sq)) {
-            square.classList.add("last-move");
-          }
-
-          square.addEventListener("click", onSquareClick);
-          boardEl.appendChild(square);
+          div.addEventListener("click", onClick);
+          boardEl.appendChild(div);
         }
       }
     }
 
-    function onSquareClick(e) {
+    function onClick(e) {
       const sq = e.currentTarget.dataset.square;
       const piece = game.get(sq);
 
-      if (!selectedSquare) {
+      // Select piece
+      if (!selected) {
         if (!piece || piece.color !== game.turn()) return;
 
-        selectedSquare = sq;
+        selected = sq;
         legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
-
-        infoEl.textContent = `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type.toUpperCase()} on ${sq}`;
         renderBoard();
         return;
       }
 
-      if (sq === selectedSquare) {
-        selectedSquare = null;
+      // Deselect
+      if (sq === selected) {
+        selected = null;
         legalMoves = [];
-        infoEl.textContent = "";
         renderBoard();
         return;
       }
 
+      // Selecting different piece of same color
       if (piece && piece.color === game.turn() && !legalMoves.includes(sq)) {
-        selectedSquare = sq;
+        selected = sq;
         legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
-        infoEl.textContent = `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type.toUpperCase()} on ${sq}`;
         renderBoard();
         return;
       }
 
+      // Make move
       if (legalMoves.includes(sq)) {
-        const move = game.move({
-          from: selectedSquare,
-          to: sq,
-          promotion: "q"
-        });
-
+        const move = game.move({ from: selected, to: sq, promotion: "q" });
         if (move) lastMove = { from: move.from, to: move.to };
 
-        selectedSquare = null;
+        selected = null;
         legalMoves = [];
-        infoEl.textContent = `Moved from ${move.from} to ${move.to}`;
         renderBoard();
         return;
       }
 
-      selectedSquare = null;
+      // Clear selection
+      selected = null;
       legalMoves = [];
-      infoEl.textContent = "";
       renderBoard();
     }
 
     renderBoard();
   </script>
+
 </body>
 </html>
