@@ -43,27 +43,27 @@
       opacity: 0.85;
     }
 
-    /* chess.com-style board colors */
+    /* board colors */
     .white-1e1d7 { background-color: #eeeed2 !important; }
     .black-3c85d { background-color: #769656 !important; }
 
-    /* SELECTED = orange highlight (fill) */
-    .highlight-selected {
-      background-color: rgba(255, 165, 0, 0.7) !important;
-    }
-
-    /* LAST MOVE = thick green highlight (#9db336) */
+    /* LAST MOVE = thick green highlight (fill) */
     .highlight-last {
       background-color: #9db336 !important;
     }
 
-    /* LEGAL MOVES = white outline (no fill) */
+    /* LEGAL MOVES = white outline, no fill */
     .highlight-legal {
       box-shadow: inset 0 0 0 3px white !important;
     }
 
-    /* REMOVE old hover outline completely */
-    /* (no :hover rule anymore) */
+    /* SELECTED = orange fill + yellow outline that overrides other outlines */
+    .highlight-selected {
+      background-color: rgba(255, 165, 0, 0.7) !important;
+      box-shadow: inset 0 0 0 4px yellow !important;
+    }
+
+    /* NO hover outline anymore */
 
     /* notation colors */
     .white-1e1d7 .notation-322f9 {
@@ -75,7 +75,7 @@
       font-weight: bold;
     }
 
-    /* hide notation by class instead of deleting it */
+    /* hide notation via class instead of deleting */
     .notation-hidden {
       visibility: hidden;
     }
@@ -91,186 +91,138 @@
 <div id="info"></div>
 
 <script>
-const game = new Chess();
-let board = null;
+  const game = new Chess();
+  let board = null;
 
-let selectedSquare = null;
-let lastMove = null;
-const infoEl = document.getElementById("info");
+  let selectedSquare = null;
+  let lastMove = null;
+  const infoEl = document.getElementById("info");
 
-/* ===== notation helpers ===== */
-function hideNotation(square) {
-  $(`.square-${square} .notation-322f9`).addClass('notation-hidden');
-}
-
-function restoreAllNotation() {
-  $('#board .notation-322f9').removeClass('notation-hidden');
-}
-
-/* ===== highlight helpers ===== */
-function clearSelectionHighlights() {
-  $("#board .square-55d63")
-    .removeClass("highlight-selected")
-    .removeClass("highlight-legal");
-}
-
-function applyLastMoveHighlight() {
-  $("#board .square-55d63").removeClass("highlight-last");
-
-  if (!lastMove) return;
-
-  $(`.square-${lastMove.from}`).addClass("highlight-last");
-  $(`.square-${lastMove.to}`).addClass("highlight-last");
-}
-
-function highlightLegalMoves(square) {
-  clearSelectionHighlights();
-
-  // selected square = orange fill, no outline
-  const sqEl = $(`.square-${square}`);
-  sqEl.addClass("highlight-selected").removeClass("highlight-legal");
-
-  const moves = game.moves({ square, verbose: true });
-  moves.forEach(m => {
-    // legal moves = white outline
-    $(`.square-${m.to}`).addClass("highlight-legal");
-  });
-}
-
-/* ============ DRAG ============ */
-function onDragStart(source, piece) {
-  if (game.game_over()) return false;
-
-  if ((game.turn() === "w" && piece[0] !== "w") ||
-      (game.turn() === "b" && piece[0] !== "b")) {
-    return false;
+  /* ===== Notation helpers ===== */
+  function hideNotation(square) {
+    $(`.square-${square} .notation-322f9`).addClass('notation-hidden');
   }
 
-  // starting a new selection by drag
-  restoreAllNotation();
-  selectedSquare = source;
-  highlightLegalMoves(source);
-  hideNotation(source);
-}
-
-function onDrop(source, target) {
-  clearSelectionHighlights();
-
-  const move = game.move({
-    from: source,
-    to: target,
-    promotion: "q"
-  });
-
-  if (!move) {
-    // illegal: restore notation, keep last move highlight
-    applyLastMoveHighlight();
-    selectedSquare = null;
-    restoreAllNotation();
-    return "snapback";
+  function restoreAllNotation() {
+    $('#board .notation-322f9').removeClass('notation-hidden');
   }
 
-  lastMove = { from: move.from, to: move.to };
-  applyLastMoveHighlight();
-  selectedSquare = null;
-  restoreAllNotation();
+  /* ===== Highlight helpers ===== */
+  function clearSelectionHighlights() {
+    $("#board .square-55d63")
+      .removeClass("highlight-selected")
+      .removeClass("highlight-legal");
+  }
 
-  infoEl.textContent =
-    `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-}
+  function applyLastMoveHighlight() {
+    $("#board .square-55d63").removeClass("highlight-last");
 
-function onSnapEnd() {
-  board.position(game.fen());
-}
+    if (!lastMove) return;
 
-/* ============ CLICK TO MOVE ============ */
+    $(`.square-${lastMove.from}`).addClass("highlight-last");
+    $(`.square-${lastMove.to}`).addClass("highlight-last");
+  }
 
-$("#board").on("click", ".square-55d63", function () {
-  const sq = $(this).attr("data-square");
-  const piece = game.get(sq);
+  function highlightLegalMoves(square) {
+    clearSelectionHighlights();
 
-  // if clicking the same selected square → deselect and restore notation
-  if (selectedSquare === sq) {
+    // selected square: orange + yellow, no outline from legal
+    const sqEl = $(`.square-${square}`);
+    sqEl.addClass("highlight-selected").removeClass("highlight-legal");
+
+    const moves = game.moves({ square, verbose: true });
+    moves.forEach(m => {
+      // legal moves: white outline
+      $(`.square-${m.to}`).addClass("highlight-legal");
+    });
+  }
+
+  /* ===== CLICK-TO-MOVE ONLY ===== */
+
+  $("#board").on("click", ".square-55d63", function () {
+    const sq = $(this).attr("data-square");
+    const piece = game.get(sq);
+
+    // Click again on the same selected square: deselect and restore notation
+    if (selectedSquare === sq) {
+      selectedSquare = null;
+      clearSelectionHighlights();
+      applyLastMoveHighlight();
+      infoEl.textContent = "";
+      restoreAllNotation();
+      return;
+    }
+
+    // No square selected yet
+    if (!selectedSquare) {
+      // must click a piece of side to move
+      if (!piece || piece.color !== game.turn()) return;
+
+      // new selection: reset notation & hide on this square only
+      restoreAllNotation();
+      selectedSquare = sq;
+      highlightLegalMoves(sq);
+      hideNotation(sq);
+
+      infoEl.textContent =
+        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      return;
+    }
+
+    // We already have a selected square -> try a move
+    const from = selectedSquare;
+    const to = sq;
+
+    const move = game.move({ from, to, promotion: "q" });
+
+    if (move) {
+      // legal move
+      lastMove = { from: move.from, to: move.to };
+      selectedSquare = null;
+      clearSelectionHighlights();
+      applyLastMoveHighlight();
+      board.position(game.fen());
+
+      infoEl.textContent =
+        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+
+      restoreAllNotation();
+      return;
+    }
+
+    // illegal click:
+    // if clicked another own piece, switch selection to that
+    if (piece && piece.color === game.turn()) {
+      restoreAllNotation();
+      selectedSquare = sq;
+      highlightLegalMoves(sq);
+      hideNotation(sq);
+
+      infoEl.textContent =
+        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
+      return;
+    }
+
+    // otherwise clear selection
     selectedSquare = null;
     clearSelectionHighlights();
     applyLastMoveHighlight();
     infoEl.textContent = "";
-    restoreAllNotation();
-    return;
-  }
-
-  // no selection yet
-  if (!selectedSquare) {
-    if (!piece || piece.color !== game.turn()) return;
-
-    // new selection – reset notation + hide on this square only
-    restoreAllNotation();
-    selectedSquare = sq;
-    highlightLegalMoves(sq);
-    hideNotation(sq);
-
-    infoEl.textContent =
-      `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-    return;
-  }
-
-  // we have a selected square -> try to move
-  const from = selectedSquare;
-  const to = sq;
-
-  const move = game.move({ from, to, promotion: "q" });
-
-  if (move) {
-    // legal move
-    lastMove = { from: move.from, to: move.to };
-    clearSelectionHighlights();
-    applyLastMoveHighlight();
-    selectedSquare = null;
     board.position(game.fen());
-
-    infoEl.textContent =
-      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-
     restoreAllNotation();
-    return;
-  }
+  });
 
-  // illegal move by click:
-  // if clicking another own piece, switch selection to that piece
-  if (piece && piece.color === game.turn()) {
-    restoreAllNotation();        // bring back old notation
-    selectedSquare = sq;         // new selected square
-    highlightLegalMoves(sq);
-    hideNotation(sq);            // hide only new one
+  /* ===== INIT BOARD (click only, no drag) ===== */
 
-    infoEl.textContent =
-      `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-    return;
-  }
+  board = Chessboard("board", {
+    draggable: false,   // <--- IMPORTANT: no drag, so clicks aren't cancelled
+    position: "start",
+    pieceTheme: piece => {
+      return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
+    }
+  });
 
-  // clicked something else -> clear selection
-  selectedSquare = null;
-  clearSelectionHighlights();
   applyLastMoveHighlight();
-  infoEl.textContent = "";
-  board.position(game.fen());
-  restoreAllNotation();
-});
-
-/* ============ INIT BOARD ============ */
-
-board = Chessboard("board", {
-  draggable: true,
-  position: "start",
-  pieceTheme: piece => {
-    return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
-  },
-  onDragStart,
-  onDrop,
-  onSnapEnd
-});
-
-applyLastMoveHighlight();
 </script>
 
 </body>
