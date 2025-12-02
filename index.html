@@ -18,6 +18,7 @@
       background: #111;
       color: white;
       font-family: system-ui, sans-serif;
+      overflow: hidden;
     }
 
     h1 { margin-bottom: 20px; }
@@ -56,16 +57,15 @@
       inset: 0;
       background: rgba(255, 255, 0, 0.32);
       z-index: 0;
-      pointer-events: none;
     }
 
     .last-move::after {
       content: "";
       position: absolute;
       inset: 0;
-      background: rgba(20, 94, 20, 0.45);
+      background: rgba(150, 255, 150, 0.45);
+      box-shadow: 0 0 6px rgba(150, 255, 150, 0.9);
       z-index: 0;
-      pointer-events: none;
     }
 
     .square img {
@@ -73,13 +73,15 @@
       max-height: 90%;
       z-index: 2;
       position: relative;
+      pointer-events: none;
     }
 
-    /* DRAGGING: we move the actual piece */
     .dragging {
       position: absolute !important;
+      width: 64px;
+      height: 64px;
+      z-index: 9999;
       pointer-events: none;
-      z-index: 999;
     }
 
     #info { margin-top: 15px; opacity: 0.8; }
@@ -106,6 +108,7 @@ let legalMoves = [];
 let lastMove = null;
 
 let dragging = false;
+let dragStarted = false;
 let draggedImg = null;
 let dragFrom = null;
 let dragOffsetX = 0;
@@ -135,10 +138,10 @@ function renderBoard() {
         img.src = pieceImage(piece);
         img.draggable = false;
 
-        div.appendChild(img);
+        // pointerdown begins potential drag
+        img.onpointerdown = (e) => prepareDrag(e, sq, img, piece);
 
-        // Attach drag events to the actual image
-        img.onpointerdown = (e) => startDrag(e, sq, img, piece);
+        div.appendChild(img);
       }
 
       if (sq === selected) div.classList.add("selected");
@@ -146,16 +149,20 @@ function renderBoard() {
       if (lastMove && (lastMove.from === sq || lastMove.to === sq))
         div.classList.add("last-move");
 
-      div.onclick = onClick;
+      // click only fires when not dragging
+      div.onclick = (e) => {
+        if (dragStarted) return;
+        onSquareClick(e);
+      };
 
       boardEl.appendChild(div);
     }
   }
 }
 
-function onClick(e) {
-  if (dragging) return;
+/* ---------------- CLICK LOGIC ---------------- */
 
+function onSquareClick(e) {
   const sq = e.currentTarget.dataset.square;
   const piece = game.get(sq);
 
@@ -166,7 +173,6 @@ function onClick(e) {
   }
 
   if (sq === selected) {
-    // clicking same square clears
     clearSelection();
     return;
   }
@@ -186,9 +192,12 @@ function onClick(e) {
 
 function selectSquare(sq) {
   const piece = game.get(sq);
+
   selected = sq;
   legalMoves = game.moves({ square: sq, verbose: true }).map(m => m.to);
+
   infoEl.textContent = `Selected ${piece.color} ${piece.type} on ${sq}`;
+
   renderBoard();
 }
 
@@ -209,34 +218,46 @@ function makeMove(from, to) {
   clearSelection();
 }
 
-/* --------------------- DRAGGING ---------------------- */
+/* ---------------- DRAG LOGIC ---------------- */
 
-function startDrag(e, sq, img, piece) {
+function prepareDrag(e, sq, img, piece) {
   if (piece.color !== game.turn()) return;
 
   dragging = true;
+  dragStarted = false; // will change once pointer moves far enough
   dragFrom = sq;
 
-  // Select piece and show legal moves
   selectSquare(sq);
 
-  // Move the ACTUAL board piece, not a clone
-  draggedImg = img;
-  draggedImg.classList.add("dragging");
-
-  // Calculate pointer offset so drag feels natural
   const rect = img.getBoundingClientRect();
   dragOffsetX = e.clientX - rect.left;
   dragOffsetY = e.clientY - rect.top;
 
-  moveDrag(e);
-
-  window.onpointermove = moveDrag;
+  window.onpointermove = (ev) => tryStartDrag(ev, img, piece);
   window.onpointerup = endDrag;
 }
 
-function moveDrag(e) {
-  if (!dragging || !draggedImg) return;
+function tryStartDrag(e, img, piece) {
+  if (!dragging) return;
+
+  const movedEnough = Math.abs(e.movementX) > 1 || Math.abs(e.movementY) > 1;
+
+  if (!dragStarted) {
+    if (!movedEnough) return;
+
+    dragStarted = true;
+
+    // move the REAL img into body
+    draggedImg = img;
+    draggedImg.classList.add("dragging");
+    document.body.appendChild(draggedImg);
+  }
+
+  moveDraggedPiece(e);
+}
+
+function moveDraggedPiece(e) {
+  if (!draggedImg) return;
 
   draggedImg.style.left = (e.pageX - dragOffsetX) + "px";
   draggedImg.style.top = (e.pageY - dragOffsetY) + "px";
@@ -244,37 +265,34 @@ function moveDrag(e) {
 
 function endDrag(e) {
   if (!dragging) return;
-
   dragging = false;
 
-  draggedImg.classList.remove("dragging");
-  draggedImg.style.left = "";
-  draggedImg.style.top = "";
+  if (dragStarted) {
+    const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
+    const dropSq = elementUnder?.dataset?.square;
 
-  const elementUnder = document.elementFromPoint(e.clientX, e.clientY);
-  const dropSq = elementUnder?.dataset?.square;
+    draggedImg.classList.remove("dragging");
 
-  // 1. Dropped on valid move square → move
-  if (dropSq && legalMoves.includes(dropSq)) {
-    makeMove(dragFrom, dropSq);
-  }
-  // 2. Dropped back on same square → KEEP selection
-  else if (dropSq === dragFrom) {
-    selectSquare(dragFrom);
-  }
-  // 3. Anywhere else → just deselect
-  else {
-    clearSelection();
+    boardEl.appendChild(draggedImg); // put back into board
+
+    if (dropSq && legalMoves.includes(dropSq)) {
+      makeMove(dragFrom, dropSq);
+    } else if (dropSq === dragFrom) {
+      selectSquare(dragFrom);
+    } else {
+      clearSelection();
+    }
   }
 
   draggedImg = null;
   dragFrom = null;
-
   window.onpointermove = null;
   window.onpointerup = null;
+  dragStarted = false;
 }
 
 renderBoard();
 </script>
+
 </body>
 </html>
