@@ -230,10 +230,7 @@ function makeMove(from, to) {
 
 function startDrag(e, sq) {
   const piece = game.get(sq);
-  if (!piece) return;
-
-  // Only drag if it's that side's turn
-  if (piece.color !== game.turn()) return;
+  if (!piece || piece.color !== game.turn()) return;
 
   e.preventDefault();
   e.stopPropagation();
@@ -241,28 +238,27 @@ function startDrag(e, sq) {
   dragging = true;
   dragFrom = sq;
 
-  // This will set selected + legalMoves AND re-render with highlights
+  // normal select so highlights appear
   selectSquare(sq);
 
-  // After render, grab the CURRENT img for this square
+  // find the UPDATED image after render
   const squareEl = boardEl.querySelector(`[data-square="${sq}"]`);
-  const img = squareEl ? squareEl.querySelector("img") : null;
-  if (!img) {
-    dragging = false;
-    dragFrom = null;
-    return;
-  }
+  const img = squareEl.querySelector("img");
 
-  // Hide the original piece while dragging
   dragSourceImg = img;
   dragSourceImg.style.opacity = "0";
 
-  // Create a clone that follows the cursor
+  // create clone
   dragClone = img.cloneNode(true);
   dragClone.classList.add("drag-piece");
-  document.body.appendChild(dragClone);
 
-  moveDrag(e); // position immediately
+  // IMPORTANT: use fixed pos so overflow:hidden doesn't hide it
+  dragClone.style.position = "fixed";
+
+  // add to root so it's always visible
+  document.documentElement.appendChild(dragClone);
+
+  moveDrag(e);
 
   window.addEventListener("pointermove", moveDrag);
   window.addEventListener("pointerup", endDrag);
@@ -271,30 +267,18 @@ function startDrag(e, sq) {
 function moveDrag(e) {
   if (!dragging || !dragClone) return;
 
-  const size = 64; // square size
-  dragClone.style.left = (e.pageX - size / 2) + "px";
-  dragClone.style.top  = (e.pageY - size / 2) + "px";
-}
-
-function getSquareFromPoint(x, y) {
-  let el = document.elementFromPoint(x, y);
-  while (el && !el.dataset?.square) {
-    el = el.parentElement;
-  }
-  return el?.dataset?.square || null;
+  const size = 64;
+  dragClone.style.left = (e.clientX - size / 2) + "px";
+  dragClone.style.top  = (e.clientY - size / 2) + "px";
 }
 
 function endDrag(e) {
   if (!dragging) return;
   dragging = false;
 
-  // Remove drag clone
-  if (dragClone) {
-    dragClone.remove();
-    dragClone = null;
-  }
+  if (dragClone) dragClone.remove();
+  dragClone = null;
 
-  // Reveal the original piece again
   if (dragSourceImg) {
     dragSourceImg.style.opacity = "1";
     dragSourceImg = null;
@@ -303,13 +287,10 @@ function endDrag(e) {
   const dropSq = getSquareFromPoint(e.clientX, e.clientY);
 
   if (dropSq && legalMoves.includes(dropSq)) {
-    // Valid move
     makeMove(dragFrom, dropSq);
   } else if (dropSq === dragFrom) {
-    // Dropped on same square → keep selection & highlights
     selectSquare(dragFrom);
   } else {
-    // Anywhere else → clear selection
     clearSelection();
   }
 
