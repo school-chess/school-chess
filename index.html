@@ -57,13 +57,18 @@
       box-shadow: inset 0 0 0 3px white !important;
     }
 
+    /* When hovering a legal move square, outline turns yellow (overrides white) */
+    #board .square-55d63.highlight-legal:hover {
+      box-shadow: inset 0 0 0 3px yellow !important;
+    }
+
     /* SELECTED = orange fill ONLY (no outline) */
     .highlight-selected {
       background-color: rgba(255, 165, 0, 0.7) !important;
       box-shadow: none !important;
     }
 
-    /* NO hover outline at all (no :hover rule) */
+    /* NO generic hover outline */
 
     /* notation colors */
     .white-1e1d7 .notation-322f9 {
@@ -126,7 +131,7 @@
   function highlightLegalMoves(square) {
     clearSelectionHighlights();
 
-    // selected square = orange fill, no outline
+    // selected square: orange fill, no outline
     const sqEl = $(`.square-${square}`);
     sqEl.addClass("highlight-selected").removeClass("highlight-legal");
 
@@ -137,17 +142,18 @@
     });
   }
 
-  /* ===== DRAG-TO-MOVE ===== */
+  /* ===== DRAG + CLICK (via drag with zero distance) ===== */
 
   function onDragStart(source, piece) {
     if (game.game_over()) return false;
 
+    // only drag correct side
     if ((game.turn() === "w" && piece[0] !== "w") ||
         (game.turn() === "b" && piece[0] !== "b")) {
       return false;
     }
 
-    // start selection via drag
+    // new selection via drag/click
     restoreAllNotation();
     selectedSquare = source;
     highlightLegalMoves(source);
@@ -156,7 +162,7 @@
   }
 
   function onDrop(source, target) {
-    clearSelectionHighlights();
+    const simpleClick = (source === target);
 
     const move = game.move({
       from: source,
@@ -164,104 +170,44 @@
       promotion: "q"
     });
 
+    // No move made
     if (!move) {
-      applyLastMoveHighlight();
-      selectedSquare = null;
-      restoreAllNotation();
-      return "snapback";
+      if (simpleClick) {
+        // This was just a click (no move) -> keep selection & highlights
+        // selectedSquare is already source, highlights are already set in onDragStart.
+        return "snapback";
+      } else {
+        // Illegal actual drag
+        clearSelectionHighlights();
+        applyLastMoveHighlight();
+        selectedSquare = null;
+        restoreAllNotation();
+        return "snapback";
+      }
     }
 
+    // Legal move
     lastMove = { from: move.from, to: move.to };
-    applyLastMoveHighlight();
     selectedSquare = null;
-    restoreAllNotation();
+    clearSelectionHighlights();
+    applyLastMoveHighlight();
+    board.position(game.fen());
 
     infoEl.textContent =
       `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+
+    restoreAllNotation();
+    // no 'snapback' -> board stays on new position
   }
 
   function onSnapEnd() {
     board.position(game.fen());
   }
 
-  /* ===== CLICK-TO-MOVE ===== */
-
-  $("#board").on("click", ".square-55d63", function () {
-    const sq = $(this).attr("data-square");
-    const piece = game.get(sq);
-
-    // If click ends a drag, chessboard already handled move; we just let click handler run as usual
-
-    // Click same selected square -> deselect
-    if (selectedSquare === sq) {
-      selectedSquare = null;
-      clearSelectionHighlights();
-      applyLastMoveHighlight();
-      infoEl.textContent = "";
-      restoreAllNotation();
-      return;
-    }
-
-    // No current selection
-    if (!selectedSquare) {
-      if (!piece || piece.color !== game.turn()) return;
-
-      restoreAllNotation();
-      selectedSquare = sq;
-      highlightLegalMoves(sq);
-      hideNotation(sq);
-
-      infoEl.textContent =
-        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-      return;
-    }
-
-    // Have a selected square -> try to move by click
-    const from = selectedSquare;
-    const to = sq;
-
-    const move = game.move({ from, to, promotion: "q" });
-
-    if (move) {
-      lastMove = { from: move.from, to: move.to };
-      selectedSquare = null;
-      clearSelectionHighlights();
-      applyLastMoveHighlight();
-      board.position(game.fen());
-
-      infoEl.textContent =
-        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-
-      restoreAllNotation();
-      return;
-    }
-
-    // Illegal click:
-    // If clicked another own piece, switch selection
-    if (piece && piece.color === game.turn()) {
-      restoreAllNotation();
-      selectedSquare = sq;
-      highlightLegalMoves(sq);
-      hideNotation(sq);
-
-      infoEl.textContent =
-        `Selected ${piece.color === "w" ? "White" : "Black"} ${piece.type} on ${sq}`;
-      return;
-    }
-
-    // Otherwise clear selection
-    selectedSquare = null;
-    clearSelectionHighlights();
-    applyLastMoveHighlight();
-    infoEl.textContent = "";
-    board.position(game.fen());
-    restoreAllNotation();
-  });
-
   /* ===== INIT BOARD ===== */
 
   board = Chessboard("board", {
-    draggable: true,   // drag is back on
+    draggable: true,
     position: "start",
     pieceTheme: piece => {
       return `https://www.chess.com/chess-themes/pieces/neo/150/${piece[0]}${piece[1].toLowerCase()}.png`;
