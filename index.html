@@ -39,14 +39,20 @@
     .white-1e1d7 { background-color: #f0d9b5 !important; }
     .black-3c85d { background-color: #b58863 !important; }
 
-    /* LEGAL MOVES ONLY (no outlines, no selected highlight):
+    /* Legal moves (only highlight we use)
        light squares = #20a3ca
        dark squares  = #178db1
     */
-    .white-1e1d7.highlight-legal   { background-color: #20a3ca !important; }
-    .black-3c85d.highlight-legal   { background-color: #178db1 !important; }
+    .white-1e1d7.highlight-legal { background-color: #20a3ca !important; }
+    .black-3c85d.highlight-legal { background-color: #178db1 !important; }
 
-    /* No other highlights, no outlines */
+    /* Kill any outlines / hover borders chessboard.js or browser might add */
+    .square-55d63,
+    .square-55d63:hover,
+    .square-55d63:focus {
+      outline: none !important;
+      box-shadow: none !important;
+    }
   </style>
 
   <link rel="icon" href="data:,">
@@ -61,6 +67,8 @@
 <script>
   const game = new Chess();
   let board = null;
+  let selectedSquare = null;
+  let suppressNextClick = false; // to ignore the click that comes right after a drag
 
   const infoEl = document.getElementById("info");
 
@@ -91,17 +99,18 @@
     });
   }
 
-  // DRAG HANDLERS
+  /* ===== DRAG-TO-MOVE ===== */
+
   function onDragStart(source, piece) {
     if (game.game_over()) return false;
 
-    // Only drag the side to move
+    // only drag correct side
     if ((game.turn() === "w" && piece[0] !== "w") ||
         (game.turn() === "b" && piece[0] !== "b")) {
       return false;
     }
 
-    // Highlight legal moves for this piece
+    selectedSquare = source;
     highlightMoves(source);
     return true;
   }
@@ -116,24 +125,81 @@
     clearLegal();
 
     if (move === null) {
-      // illegal → snapback
+      selectedSquare = null;
       return "snapback";
     }
 
-    // legal move: show info, position will be synced in onSnapEnd
+    // Legal move
+    board.position(game.fen());
     infoEl.textContent =
       `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+
+    selectedSquare = null;
+
+    // Ignore the click that comes right after this drag
+    suppressNextClick = true;
   }
 
   function onSnapEnd() {
-    // Sync board with game state (drag animation already happened)
     board.position(game.fen());
   }
 
-  // INIT BOARD (drag-to-move, no notation)
+  /* ===== CLICK-TO-MOVE ===== */
+
+  $("#board").on("click", ".square-55d63", function () {
+    // Ignore the synthetic click that happens immediately after a drag
+    if (suppressNextClick) {
+      suppressNextClick = false;
+      return;
+    }
+
+    const sq = $(this).attr("data-square");
+    const piece = game.get(sq);
+
+    // clicking same selected square → unselect
+    if (selectedSquare === sq) {
+      selectedSquare = null;
+      clearLegal();
+      return;
+    }
+
+    // no selection yet
+    if (!selectedSquare) {
+      if (!piece || piece.color !== game.turn()) return;
+      selectedSquare = sq;
+      highlightMoves(sq);
+      return;
+    }
+
+    // try move from selectedSquare to sq
+    const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
+
+    if (move) {
+      board.position(game.fen(), true); // animate on click-moves
+      infoEl.textContent =
+        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
+      selectedSquare = null;
+      clearLegal();
+      return;
+    }
+
+    // illegal, but clicked another own piece → reselect
+    if (piece && piece.color === game.turn()) {
+      selectedSquare = sq;
+      highlightMoves(sq);
+      return;
+    }
+
+    // otherwise clear
+    selectedSquare = null;
+    clearLegal();
+  });
+
+  /* ===== INIT BOARD ===== */
+
   board = Chessboard("board", {
-    draggable: true,
-    showNotation: false,
+    draggable: true,          // drag-to-move
+    showNotation: false,      // no coordinates
     position: "start",
     pieceTheme: piece => LICHESS_PIECES[piece] || "",
     onDragStart,
