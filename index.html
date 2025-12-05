@@ -4,17 +4,11 @@
   <meta charset="UTF-8" />
   <title>School Chess</title>
 
-  <!-- Chessboard.js CSS -->
   <link rel="stylesheet"
-        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
+        href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
 
-  <!-- jQuery -->
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-
-  <!-- Chessboard.js -->
   <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-
-  <!-- chess.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
 
   <style>
@@ -30,23 +24,17 @@
     }
 
     h1 { margin: 20px 0; }
-
     #board { width: 512px; }
 
-    #info { margin-top: 15px; opacity: 0.85; }
-
-    /* Classic brown board */
+    /* Brown board */
     .white-1e1d7 { background-color: #f0d9b5 !important; }
     .black-3c85d { background-color: #b58863 !important; }
 
-    /* Legal moves (only highlight we use)
-       light squares = #20a3ca
-       dark squares  = #178db1
-    */
+    /* Legal move highlights */
     .white-1e1d7.highlight-legal { background-color: #20a3ca !important; }
     .black-3c85d.highlight-legal { background-color: #178db1 !important; }
 
-    /* Kill any outlines / hover borders chessboard.js or browser might add */
+    /* Kill all outlines / borders */
     .square-55d63,
     .square-55d63:hover,
     .square-55d63:focus {
@@ -55,153 +43,119 @@
     }
   </style>
 
-  <link rel="icon" href="data:,">
 </head>
 <body>
 
 <h1>School Chess</h1>
-
 <div id="board"></div>
-<div id="info"></div>
 
 <script>
   const game = new Chess();
-  let board = null;
-  let selectedSquare = null;
-  let suppressNextClick = false; // to ignore the click that comes right after a drag
+  let board;
+  let selected = null;
 
-  const infoEl = document.getElementById("info");
-
-  const LICHESS_PIECES = {
-    wK: "https://lichess1.org/assets/hashed/wK.bc7274dd.svg",
-    wQ: "https://lichess1.org/assets/hashed/wQ.79c9227e.svg",
-    wR: "https://lichess1.org/assets/hashed/wR.e9e95adc.svg",
-    wB: "https://lichess1.org/assets/hashed/wB.b7d1a118.svg",
-    wN: "https://lichess1.org/assets/hashed/wN.68b788d7.svg",
-    wP: "https://lichess1.org/assets/hashed/wP.0596b7ce.svg",
-    bK: "https://lichess1.org/assets/hashed/bK.c5f22c23.svg",
-    bQ: "https://lichess1.org/assets/hashed/bQ.5abdb5aa.svg",
-    bR: "https://lichess1.org/assets/hashed/bR.c33a3d54.svg",
-    bB: "https://lichess1.org/assets/hashed/bB.77e9debf.svg",
-    bN: "https://lichess1.org/assets/hashed/bN.d0665564.svg",
-    bP: "https://lichess1.org/assets/hashed/bP.09539f32.svg",
+  const PIECES = {
+    wK:"https://lichess1.org/assets/hashed/wK.bc7274dd.svg",
+    wQ:"https://lichess1.org/assets/hashed/wQ.79c9227e.svg",
+    wR:"https://lichess1.org/assets/hashed/wR.e9e95adc.svg",
+    wB:"https://lichess1.org/assets/hashed/wB.b7d1a118.svg",
+    wN:"https://lichess1.org/assets/hashed/wN.68b788d7.svg",
+    wP:"https://lichess1.org/assets/hashed/wP.0596b7ce.svg",
+    bK:"https://lichess1.org/assets/hashed/bK.c5f22c23.svg",
+    bQ:"https://lichess1.org/assets/hashed/bQ.5abdb5aa.svg",
+    bR:"https://lichess1.org/assets/hashed/bR.c33a3d54.svg",
+    bB:"https://lichess1.org/assets/hashed/bB.77e9debf.svg",
+    bN:"https://lichess1.org/assets/hashed/bN.d0665564.svg",
+    bP:"https://lichess1.org/assets/hashed/bP.09539f32.svg",
   };
 
   function clearLegal() {
-    $("#board .square-55d63").removeClass("highlight-legal");
+    $(".square-55d63").removeClass("highlight-legal");
   }
 
-  function highlightMoves(square) {
+  function showLegal(square) {
     clearLegal();
-    const moves = game.moves({ square, verbose: true });
-    moves.forEach(m => {
-      $(`.square-${m.to}`).addClass("highlight-legal");
-    });
+    const moves = game.moves({ square, verbose:true });
+    moves.forEach(m => $(`.square-${m.to}`).addClass("highlight-legal"));
   }
 
-  /* ===== DRAG-TO-MOVE ===== */
-
+  /* ----------------------
+     DRAG-TO-MOVE
+  ----------------------- */
   function onDragStart(source, piece) {
     if (game.game_over()) return false;
+    if (piece[0] !== game.turn()) return false;
 
-    // only drag correct side
-    if ((game.turn() === "w" && piece[0] !== "w") ||
-        (game.turn() === "b" && piece[0] !== "b")) {
-      return false;
-    }
-
-    selectedSquare = source;
-    highlightMoves(source);
+    selected = source;
+    showLegal(source);
     return true;
   }
 
   function onDrop(source, target) {
-    const move = game.move({
-      from: source,
-      to: target,
-      promotion: "q"
-    });
-
+    const move = game.move({ from:source, to:target, promotion:"q" });
     clearLegal();
 
-    if (move === null) {
-      selectedSquare = null;
-      return "snapback";
-    }
+    if (!move) return "snapback";
 
-    // Legal move
     board.position(game.fen());
-    infoEl.textContent =
-      `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-
-    selectedSquare = null;
-
-    // Ignore the click that comes right after this drag
-    suppressNextClick = true;
+    selected = null;
   }
 
   function onSnapEnd() {
     board.position(game.fen());
   }
 
-  /* ===== CLICK-TO-MOVE ===== */
-
+  /* ----------------------
+     CLICK-TO-MOVE
+  ----------------------- */
   $("#board").on("click", ".square-55d63", function () {
-    // Ignore the synthetic click that happens immediately after a drag
-    if (suppressNextClick) {
-      suppressNextClick = false;
-      return;
-    }
-
-    const sq = $(this).attr("data-square");
+    const sq = $(this).data("square");
     const piece = game.get(sq);
 
-    // clicking same selected square → unselect
-    if (selectedSquare === sq) {
-      selectedSquare = null;
+    // Clicking same selected → deselect
+    if (selected === sq) {
+      selected = null;
       clearLegal();
       return;
     }
 
-    // no selection yet
-    if (!selectedSquare) {
+    // No selection yet → select a piece
+    if (!selected) {
       if (!piece || piece.color !== game.turn()) return;
-      selectedSquare = sq;
-      highlightMoves(sq);
+      selected = sq;
+      showLegal(sq);
       return;
     }
 
-    // try move from selectedSquare to sq
-    const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
+    // Attempt a move
+    const move = game.move({ from:selected, to:sq, promotion:"q" });
+    clearLegal();
 
     if (move) {
-      board.position(game.fen(), true); // animate on click-moves
-      infoEl.textContent =
-        `${move.color === "w" ? "White" : "Black"} moved ${move.piece} from ${move.from} to ${move.to}`;
-      selectedSquare = null;
-      clearLegal();
+      board.position(game.fen(), true); // animate click moves
+      selected = null;
       return;
     }
 
-    // illegal, but clicked another own piece → reselect
+    // Clicked another own piece → switch selection
     if (piece && piece.color === game.turn()) {
-      selectedSquare = sq;
-      highlightMoves(sq);
+      selected = sq;
+      showLegal(sq);
       return;
     }
 
-    // otherwise clear
-    selectedSquare = null;
-    clearLegal();
+    // Otherwise clear
+    selected = null;
   });
 
-  /* ===== INIT BOARD ===== */
-
+  /* ----------------------
+     INIT BOARD
+  ----------------------- */
   board = Chessboard("board", {
-    draggable: true,          // drag-to-move
-    showNotation: false,      // no coordinates
-    position: "start",
-    pieceTheme: piece => LICHESS_PIECES[piece] || "",
+    draggable:true,
+    showNotation:false,
+    position:"start",
+    pieceTheme: piece => PIECES[piece],
     onDragStart,
     onDrop,
     onSnapEnd
