@@ -39,11 +39,14 @@
     .white-1e1d7 { background-color: #f0d9b5 !important; }
     .black-3c85d { background-color: #b58863 !important; }
 
-    /* Legal moves only */
+    /* Legal moves only:
+       light squares = #20a3ca
+       dark squares  = #178db1
+    */
     .white-1e1d7.highlight-legal { background-color: #20a3ca !important; }
     .black-3c85d.highlight-legal { background-color: #178db1 !important; }
 
-    /* No other highlights at all */
+    /* No other highlights or outlines at all */
   </style>
 
   <link rel="icon" href="data:,">
@@ -60,6 +63,21 @@
   let board = null;
   let selectedSquare = null;
 
+  const LICHESS_PIECES = {
+    wK: "https://lichess1.org/assets/hashed/wK.bc7274dd.svg",
+    wQ: "https://lichess1.org/assets/hashed/wQ.79c9227e.svg",
+    wR: "https://lichess1.org/assets/hashed/wR.e9e95adc.svg",
+    wB: "https://lichess1.org/assets/hashed/wB.b7d1a118.svg",
+    wN: "https://lichess1.org/assets/hashed/wN.68b788d7.svg",
+    wP: "https://lichess1.org/assets/hashed/wP.0596b7ce.svg",
+    bK: "https://lichess1.org/assets/hashed/bK.c5f22c23.svg",
+    bQ: "https://lichess1.org/assets/hashed/bQ.5abdb5aa.svg",
+    bR: "https://lichess1.org/assets/hashed/bR.c33a3d54.svg",
+    bB: "https://lichess1.org/assets/hashed/bB.77e9debf.svg",
+    bN: "https://lichess1.org/assets/hashed/bN.d0665564.svg",
+    bP: "https://lichess1.org/assets/hashed/bP.09539f32.svg",
+  };
+
   function clearLegal() {
     $("#board .square-55d63").removeClass("highlight-legal");
   }
@@ -72,19 +90,19 @@
     });
   }
 
-  // CLICK-TO-MOVE
+  // CLICK-TO-MOVE ONLY
   $("#board").on("click", ".square-55d63", function () {
     const sq = $(this).attr("data-square");
     const piece = game.get(sq);
 
-    // clicked same square → unselect
+    // clicking same selected square → unselect
     if (selectedSquare === sq) {
       selectedSquare = null;
       clearLegal();
       return;
     }
 
-    // No selection yet
+    // no selection yet
     if (!selectedSquare) {
       if (!piece || piece.color !== game.turn()) return;
       selectedSquare = sq;
@@ -92,17 +110,18 @@
       return;
     }
 
-    // Try to move
+    // try move from selectedSquare to sq
     const move = game.move({ from: selectedSquare, to: sq, promotion: "q" });
 
     if (move) {
+      // legal move: animate and clear
       board.position(game.fen(), true);
       selectedSquare = null;
       clearLegal();
       return;
     }
 
-    // illegal but switching pieces
+    // illegal, but clicked another own piece → reselect
     if (piece && piece.color === game.turn()) {
       selectedSquare = sq;
       highlightMoves(sq);
@@ -116,14 +135,10 @@
 
   // INIT BOARD
   board = Chessboard("board", {
-    draggable: false,
-    showNotation: false,
+    draggable: false,       // click-to-move only (animations only on click moves)
+    showNotation: false,    // no file/rank labels
     position: "start",
-    pieceTheme: piece => {
-      const color = piece[0] === "w" ? "w" : "b";
-      const type = piece[1].toLowerCase();
-      return `https://raw.githubusercontent.com/lichess-org/lila/master/public/piece/cburnett/${color}${type}.svg`;
-    }
+    pieceTheme: piece => LICHESS_PIECES[piece] || ""
   });
 </script>
 
