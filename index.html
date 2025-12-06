@@ -117,11 +117,13 @@
     }
 
     selected = null;
-    board.position(game.fen());
+    // NO ANIMATION on drag move
+    board.position(game.fen(), false);
   }
 
   function onSnapEnd() {
-    board.position(game.fen());
+    // Also ensure no animation here
+    board.position(game.fen(), false);
   }
 
   /* -----------------------
@@ -184,7 +186,8 @@
     clearLegal();
 
     if (move) {
-      board.position(game.fen(), true); // animate click move
+      // This still animates click-moves; set false if you want that gone too.
+      board.position(game.fen(), true);
       selected = null;
       return;
     }
@@ -209,6 +212,13 @@
     showNotation: false,
     position: "start",
     pieceTheme: piece => LICHESS_PIECES[piece] || "",
+
+    // Turn off drag/drop animations
+    moveSpeed: 0,
+    snapbackSpeed: 0,
+    snapSpeed: 0,
+    trashSpeed: 0,
+
     onDragStart,
     onDrop,
     onSnapEnd
