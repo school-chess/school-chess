@@ -93,7 +93,6 @@
 
   function onDragStart(source, piece) {
     if (game.game_over()) return false;
-
     if (piece[0] !== game.turn()) return false; // only current side
 
     selected = source;
@@ -104,7 +103,6 @@
   function onDrop(source, target) {
     // If dropped on same square, treat as click-select only
     if (source === target) {
-      // keep highlights (they were set on dragStart) and let click handler handle moves
       return "snapback";
     }
 
@@ -122,7 +120,7 @@
   }
 
   function onSnapEnd() {
-    // Also ensure no animation here
+    // Ensure we're always fully synced, no animation
     board.position(game.fen(), false);
   }
 
@@ -186,8 +184,8 @@
     clearLegal();
 
     if (move) {
-      // This still animates click-moves; set false if you want that gone too.
-      board.position(game.fen(), true);
+      // NO animation for click-move either
+      board.position(game.fen(), false);
       selected = null;
       return;
     }
@@ -213,7 +211,7 @@
     position: "start",
     pieceTheme: piece => LICHESS_PIECES[piece] || "",
 
-    // Turn off drag/drop animations
+    // Turn off animations
     moveSpeed: 0,
     snapbackSpeed: 0,
     snapSpeed: 0,
