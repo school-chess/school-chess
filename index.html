@@ -103,7 +103,7 @@
   function onDrop(source, target) {
     // If dropped on same square, treat as click-select only
     if (source === target) {
-      return "snapback";
+      return "snapback"; // snap back instantly (snapbackSpeed = 0)
     }
 
     const move = game.move({ from: source, to: target, promotion: "q" });
@@ -111,16 +111,17 @@
 
     if (!move) {
       selected = null;
-      return "snapback";
+      return "snapback"; // invalid -> snap back instantly
     }
 
     selected = null;
-    // NO ANIMATION on drag move
+
+    // Drag move: update board instantly, no animation
     board.position(game.fen(), false);
   }
 
   function onSnapEnd() {
-    // Ensure we're always fully synced, no animation
+    // Just make sure we stay synced, no animation
     board.position(game.fen(), false);
   }
 
@@ -184,8 +185,8 @@
     clearLegal();
 
     if (move) {
-      // NO animation for click-move either
-      board.position(game.fen(), false);
+      // CLICK MOVE: animate using moveSpeed
+      board.position(game.fen(), true);
       selected = null;
       return;
     }
@@ -211,11 +212,12 @@
     position: "start",
     pieceTheme: piece => LICHESS_PIECES[piece] || "",
 
-    // Turn off animations
-    moveSpeed: 0,
-    snapbackSpeed: 0,
-    snapSpeed: 0,
-    trashSpeed: 0,
+    // Click animations use moveSpeed.
+    // Drag snap/snapback are instant (0).
+    moveSpeed: 200,      // animation speed for board.position(..., true)
+    snapSpeed: 0,        // drag snap to square
+    snapbackSpeed: 0,    // drag snap back
+    trashSpeed: 0,       // piece "trash" anim, if ever used
 
     onDragStart,
     onDrop,
